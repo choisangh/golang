@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
-	"github.com/choisangh/golang/banking/banking"
+	"github.com/choisangh/golang/banking"
 )
 
 func lenAndUpper(name string) (int, string) {
@@ -110,6 +111,18 @@ func main() {
 	pointers()
 	test_array()
 	test_structs()
-	account := banking.Account{owner: "choi", balance: 100}
+	account := banking.NewAccount("choi")
+	fmt.Println(account)
+	account.Deposit(100)
+	fmt.Println(account.Balance())
+
+	err := account.Withdraw(130) //error 체크도 따로 만들어야함
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	fmt.Println(account.Balance())
+	account.Withdraw(70)
+	fmt.Println(account.Balance())
 
 }
