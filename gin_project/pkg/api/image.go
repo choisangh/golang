@@ -2,56 +2,143 @@ package api
 
 import (
 	"fmt"
-	"mime/multipart"
 	"net/http"
-	"strconv"
+	"os"
 
 	"github.com/choisangh/gin_project/internal/global"
+	"github.com/choisangh/gin_project/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
 
-type RequestFile struct {
-	File *multipart.FileHeader `form:"file"`
+type RequestCreate struct {
+	FileNO      string `json:"no" binding:"required"`
+	ImageBase64 string `json:"image" binding:"required"`
+}
+type Requestput struct {
+	ImageBase64 string `json:"image" binding:"required"`
 }
 
 type RequestURI struct {
-	ImageID string `uri:"id"`
+	ImageID string `uri:"id" binding:"required"`
 }
 
 type Response struct {
 	Res string `json:"res"`
 }
 
+const (
+	FILE_NOT_VALID_MSG        = "file is not valid"
+	FILE_ALREADY_EXIST_MSG    = "file is already exist"
+	FILE_NOT_EXIST_MSG        = "file is not exist"
+	FILE_FORMAT_NOT_VALID_MSG = "file is not image format"
+	FILE_CREATING_ERR_MSG     = "file creating error"
+	FILE_DELETE_ERR_MSG       = "failed to delete file"
+	SUCCESS_MSG               = "success"
+)
+
 func CreateImage(c *gin.Context) {
-	req := RequestFile{}
-	//인자 주소값을 줘야함 //Bind는 리스폰스하고 에러 -> ShouldBind가 에러 핸들링 자유도가 높아서 ShouldBind 추천
-	if err := c.ShouldBind(&req); err != nil {
+	// 바인딩
+	req := RequestCreate{}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		fmt.Println(err)
-		c.JSON(http.StatusBadRequest, Response{Res: "file is not valid"})
-
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_NOT_VALID_MSG})
 		return
 	}
 
-	if err := c.SaveUploadedFile(req.File, "images/"+strconv.FormatInt(global.MaxImageNumber, 10)); err != nil { //int -> string 파일명
-		fmt.Println(err)
-		c.JSON(http.StatusBadRequest, Response{Res: "file is not valid"})
-
+	// 파일명이 중복되는지 확인
+	filename := req.FileNO
+	if utils.IsFileExists(filename, global.FILEPATH) {
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_ALREADY_EXIST_MSG})
 		return
 	}
-	global.MaxImageNumber++
 
-	c.JSON(http.StatusOK, Response{Res: "success"})
+	// 이미지 파일인지 확인
+	if !utils.IsValidImageFormat(req.ImageBase64) {
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_FORMAT_NOT_VALID_MSG})
+		return
+	}
 
+	// 이미지 파일 생성
+	if err := utils.CreateImageFile(filename, req.ImageBase64, global.FILEPATH); err != nil {
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_CREATING_ERR_MSG})
+		return
+	}
+
+	// 성공 응답
+	c.JSON(http.StatusOK, Response{Res: SUCCESS_MSG})
 }
 
 func ReadImage(c *gin.Context) {
+	// 바인딩
 	reqURI := RequestURI{}
 	if err := c.ShouldBindUri(&reqURI); err != nil {
 		fmt.Println(err)
-		c.JSON(http.StatusBadRequest, Response{Res: "file is not valid"})
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_NOT_VALID_MSG})
 		return
 	}
-	fmt.Println(reqURI.ImageID)
-	c.File("images/" + reqURI.ImageID)
+
+	// 읽을 파일이 존재하는지 확인
+	filename := reqURI.ImageID
+	if !utils.IsFileExists(filename, global.FILEPATH) {
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_NOT_EXIST_MSG})
+		return
+	}
+
+	// 파일 내보내기
+	c.File(global.FILEPATH + filename)
+}
+
+func PutImage(c *gin.Context) {
+	// 바인딩
+	req := Requestput{}
+	if err := c.ShouldBind(&req); err != nil {
+		fmt.Println(err)
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_NOT_VALID_MSG})
+
+		return
+	}
+
+	// 수정할 파일 존재하는지 확인
+	filename := c.Param("id")
+	if !utils.IsFileExists(filename, global.FILEPATH) {
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_NOT_EXIST_MSG})
+		return
+	}
+
+	// 이미지 파일 생성
+	if err := utils.CreateImageFile(filename, req.ImageBase64, global.FILEPATH); err != nil {
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_CREATING_ERR_MSG})
+		return
+	}
+
+	// 성공 응답
+	c.JSON(http.StatusOK, Response{Res: SUCCESS_MSG})
+
+}
+
+func DeleteImage(c *gin.Context) {
+	// 바인딩
+	reqURI := RequestURI{}
+	if err := c.ShouldBindUri(&reqURI); err != nil {
+		fmt.Println(err)
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_NOT_VALID_MSG})
+		return
+	}
+
+	// 삭제할 파일이 존재하는지 확인
+	filename := reqURI.ImageID
+	if !utils.IsFileExists(filename, global.FILEPATH) {
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_NOT_EXIST_MSG})
+		return
+	}
+
+	// 파일 삭제
+	if err := os.Remove(global.FILEPATH + filename); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Res: FILE_DELETE_ERR_MSG})
+		return
+	}
+
+	// 성공 응답
+	c.JSON(http.StatusOK, Response{Res: SUCCESS_MSG})
 
 }
