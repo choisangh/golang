@@ -105,6 +105,12 @@ func PutImage(c *gin.Context) {
 		return
 	}
 
+	// 이미지 파일인지 확인
+	if !utils.IsValidImageFormat(req.ImageBase64) {
+		c.JSON(http.StatusBadRequest, Response{Res: FILE_FORMAT_NOT_VALID_MSG})
+		return
+	}
+
 	// 이미지 파일 생성
 	if err := utils.CreateImageFile(filename, req.ImageBase64, global.FILEPATH); err != nil {
 		c.JSON(http.StatusBadRequest, Response{Res: FILE_CREATING_ERR_MSG})
